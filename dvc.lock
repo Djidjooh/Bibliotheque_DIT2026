@@ -25,7 +25,7 @@ stages:
       size: 1107
     - path: dvc-pipeline/params.yaml
       hash: md5
-      md5: b36b8d2617c9e02f5682a79783842e51
+      md5: 368c8ec4e1ec282bd02549a31a741a42
       size: 70
     - path: dvc-pipeline/train.py
       hash: md5
@@ -33,15 +33,15 @@ stages:
       size: 1564
     params:
       dvc-pipeline/params.yaml:
-        train.lr_all: 0.005
-        train.n_epochs: 20
-        train.n_factors: 50
+        train.lr_all: 0.01
+        train.n_epochs: 30
+        train.n_factors: 100
         train.reg_all: 0.02
     outs:
     - path: dvc-pipeline/models/model.pkl
       hash: md5
-      md5: 82f569759768cc2816f0707ea66786ec
-      size: 7123
+      md5: f1d07db2cc36e55a6d878e0b7c39a732
+      size: 12323
   evaluate:
     cmd: python dvc-pipeline/evaluate.py
     deps:
@@ -55,10 +55,10 @@ stages:
       size: 2798
     - path: dvc-pipeline/models/model.pkl
       hash: md5
-      md5: 82f569759768cc2816f0707ea66786ec
-      size: 7123
+      md5: f1d07db2cc36e55a6d878e0b7c39a732
+      size: 12323
     outs:
     - path: metrics/metrics.json
       hash: md5
-      md5: 7b2c1e88b7b49babea93c2d307e769d9
+      md5: b3447f3585ba09024612e1fadc8cb924
       size: 117
