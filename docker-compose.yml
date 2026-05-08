@@ -6,8 +6,6 @@ networks:
 
 volumes:
   postgres_data:
-  model_data:
-  training_data:
 
 services:
 
@@ -133,8 +131,8 @@ services:
       MODEL_PATH:   models/model.pkl
       DATA_PATH:    dvc-pipeline/data/loans_clean.csv
     volumes:
-      - model_data:/app/models
-      - training_data:/app/dvc-pipeline/data
+      - ./dvc-pipeline/models:/app/models
+      - ./dvc-pipeline/data:/app/dvc-pipeline/data
     ports:
       - "3004:3004"
     networks:

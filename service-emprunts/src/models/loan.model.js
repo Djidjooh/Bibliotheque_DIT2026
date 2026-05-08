@@ -134,7 +134,7 @@ const LoanModel = {
         `UPDATE emprunts
          SET statut = 'retourne',
              date_retour_effective = CURRENT_DATE
-         WHERE id = $1 AND statut = 'en_cours'
+         WHERE id = $1 AND statut IN ('en_cours', 'en_retard')
          RETURNING *`,
         [id]
       );
