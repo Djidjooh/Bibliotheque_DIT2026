@@ -1,0 +1,169 @@
+version: '3.9'
+
+networks:
+  bibliotheque_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  model_data:
+  training_data:
+
+services:
+
+  # =============================================
+  # BASE DE DONNÉES
+  # =============================================
+  db:
+    image: postgres:15-alpine
+    container_name: bibliotheque_db
+    environment:
+      POSTGRES_DB:       bibliotheque
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - bibliotheque_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================
+  # SERVICE LIVRES
+  # =============================================
+  service-livres:
+    build:
+      context: ./service-livres
+      dockerfile: Dockerfile
+    container_name: bibliotheque_livres
+    environment:
+      PORT:        3001
+      DB_HOST:     db
+      DB_PORT:     5432
+      DB_NAME:     bibliotheque
+      DB_USER:     postgres
+      DB_PASSWORD: postgres
+    ports:
+      - "3001:3001"
+    networks:
+      - bibliotheque_network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # =============================================
+  # SERVICE UTILISATEURS
+  # =============================================
+  service-utilisateurs:
+    build:
+      context: ./service-utilisateurs
+      dockerfile: Dockerfile
+    container_name: bibliotheque_utilisateurs
+    environment:
+      PORT:           3002
+      DB_HOST:        db
+      DB_PORT:        5432
+      DB_NAME:        bibliotheque
+      DB_USER:        postgres
+      DB_PASSWORD:    postgres
+      JWT_SECRET:     secret_jwt_bibliotheque_dit
+      JWT_EXPIRES_IN: 24h
+    ports:
+      - "3002:3002"
+    networks:
+      - bibliotheque_network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # =============================================
+  # SERVICE EMPRUNTS
+  # =============================================
+  service-emprunts:
+    build:
+      context: ./service-emprunts
+      dockerfile: Dockerfile
+    container_name: bibliotheque_emprunts
+    environment:
+      PORT:                    3003
+      DB_HOST:                 db
+      DB_PORT:                 5432
+      DB_NAME:                 bibliotheque
+      DB_USER:                 postgres
+      DB_PASSWORD:             postgres
+      SERVICE_LIVRES_URL:      http://service-livres:3001
+      SERVICE_UTILISATEURS_URL: http://service-utilisateurs:3002
+      DUREE_EMPRUNT_JOURS:     14
+    ports:
+      - "3003:3003"
+    networks:
+      - bibliotheque_network
+    depends_on:
+      db:
+        condition: service_healthy
+      service-livres:
+        condition: service_started
+      service-utilisateurs:
+        condition: service_started
+    restart: unless-stopped
+
+  # =============================================
+  # SERVICE RECOMMANDATION
+  # =============================================
+  service-recommandation:
+    build:
+      context: ./service-recommandation
+      dockerfile: Dockerfile
+    container_name: bibliotheque_recommandation
+    environment:
+      PORT:         3004
+      DB_HOST:      db
+      DB_PORT:      5432
+      DB_NAME:      bibliotheque
+      DB_USER:      postgres
+      DB_PASSWORD:  postgres
+      MODEL_PATH:   models/model.pkl
+      DATA_PATH:    dvc-pipeline/data/loans_clean.csv
+    volumes:
+      - model_data:/app/models
+      - training_data:/app/dvc-pipeline/data
+    ports:
+      - "3004:3004"
+    networks:
+      - bibliotheque_network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # =============================================
+  # FRONTEND
+  # =============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bibliotheque_frontend
+    environment:
+      REACT_APP_SERVICE_LIVRES:      http://localhost:3001
+      REACT_APP_SERVICE_UTILISATEURS: http://localhost:3002
+      REACT_APP_SERVICE_EMPRUNTS:    http://localhost:3003
+      REACT_APP_SERVICE_RECO:        http://localhost:3004
+    ports:
+      - "3000:3000"
+    networks:
+      - bibliotheque_network
+    depends_on:
+      - service-livres
+      - service-utilisateurs
+      - service-emprunts
+      - service-recommandation
+    restart: unless-stopped

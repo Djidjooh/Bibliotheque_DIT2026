@@ -99,5 +99,70 @@ PostgreSQL exécute automatiquement tout fichier .sql placé dans /docker-entryp
 ###############################Service-utilisateurs########################
 Le token JWT généré au login sera réutilisé par les autres services pour identifier l'utilisateur courant — notamment le Service Emprunts qui en aura besoin.
 #############################service-emprunts###################################
+Deux points importants dans ce service : la création d'un emprunt utilise une transaction PostgreSQL (BEGIN / COMMIT / ROLLBACK) pour garantir qu'on ne dépasse jamais le nombre d'exemplaires disponibles, même en cas de requêtes simultanées. Et le script export_loans.py est le pont entre la base de données et le pipeline DVC.
+#############################service-recommandation#############################
+Le flux complet est le suivant : le frontend appelle GET /api/recommendations/{user_id}, le modèle SVD prédit un score pour chaque livre non encore emprunté par l'utilisateur, et retourne le top-K trié par score décroissant. Si le modèle n'est pas encore chargé, l'API répond 503 avec un message explicite invitant à lancer POST /api/train.
 
 
+# Bibliothèque Numérique DIT
+
+## Lancement avec Docker Compose
+
+```bash
+# Mode développement (hot-reload)
+docker-compose up --build
+
+# Mode production
+docker-compose -f docker-compose.yml up --build -d
+```
+
+## Initialisation de la base de données
+
+La base est initialisée automatiquement au premier démarrage
+via `database/init.sql`. Pour réinitialiser :
+
+```bash
+docker-compose down -v
+docker-compose up --build
+```
+
+## Entraînement du modèle avec DVC
+
+```bash
+# Activer l'environnement
+conda activate bibliotheque2
+
+# Lancer le pipeline complet
+dvc repro
+
+# Afficher les métriques
+dvc metrics show
+
+# Comparer deux versions
+dvc metrics diff v1.0
+```
+
+## Tests des endpoints
+
+```bash
+# Service Livres
+curl http://localhost:3001/health
+curl http://localhost:3001/api/livres
+curl http://localhost:3001/api/livres/search?q=intelligence
+
+# Service Utilisateurs
+curl http://localhost:3002/health
+curl -X POST http://localhost:3002/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"nom":"Diallo","prenom":"Mamadou","email":"test@dit.sn",
+       "mot_de_passe":"password123","type_utilisateur":"etudiant"}'
+
+# Service Emprunts
+curl http://localhost:3003/health
+curl http://localhost:3003/api/emprunts/stats
+
+# Service Recommandation
+curl http://localhost:3004/health
+curl http://localhost:3004/api/recommendations/USER_ID
+curl -X POST http://localhost:3004/api/train
+```

@@ -1,4 +1,3 @@
-# ---- Étape 1 : builder ----
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -8,26 +7,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+RUN pip install --prefix=/install --no-cache-dir "numpy==1.26.4"
 RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
 
-# ---- Étape 2 : image finale ----
 FROM python:3.11-slim AS final
-
-# Utilisateur non-root
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 WORKDIR /app
 
-# Copier les dépendances installées depuis le builder
 COPY --from=builder /install /usr/local
 
-# Copier le code source
-COPY --chown=appuser:appgroup . .
+COPY . .
 
-# Créer les dossiers nécessaires
-RUN mkdir -p models dvc-pipeline/data
-
-USER appuser
+RUN mkdir -p models dvc-pipeline/data /root/.surprise
 
 EXPOSE 3004
 

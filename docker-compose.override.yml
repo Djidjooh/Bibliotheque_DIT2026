@@ -1,0 +1,21 @@
+services:
+
+  service-livres:
+    environment:
+      NODE_ENV: development
+
+  service-utilisateurs:
+    environment:
+      NODE_ENV: development
+
+  service-emprunts:
+    environment:
+      NODE_ENV: development
+
+  service-recommandation:
+    environment:
+      ENV: development
+
+  db:
+    ports:
+      - "5432:5432"
