@@ -2,8 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
 const morgan  = require('morgan');
-const userRoutes = require('./routes/user.routes');
-const authRoutes = require('./routes/auth.routes');
+const userRoutes  = require('./routes/user.routes');
+const authRoutes  = require('./routes/auth.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use('/api/utilisateurs', userRoutes);
 app.use('/api/auth',         authRoutes);
+app.use('/api/admin',        adminRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'utilisateurs' });
