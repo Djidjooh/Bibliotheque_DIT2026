@@ -54,6 +54,7 @@ const AuthController = {
           prenom:           user.prenom,
           email:            user.email,
           type_utilisateur: user.type_utilisateur,
+          model_id:         user.model_id,
         }
       });
     } catch (err) {

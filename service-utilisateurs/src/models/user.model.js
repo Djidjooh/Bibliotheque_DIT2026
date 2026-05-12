@@ -42,19 +42,25 @@ const UserModel = {
   // Trouver par email (avec mot de passe — pour l'auth)
   async findByEmail(email) {
     const { rows } = await pool.query(
-      `SELECT * FROM utilisateurs WHERE email = $1`, [email]
+      `SELECT id, nom, prenom, email, mot_de_passe, type_utilisateur, model_id, actif
+       FROM utilisateurs WHERE email = $1`,
+      [email]
     );
     return rows[0] || null;
   },
 
-  // Créer un utilisateur
+  // Créer un utilisateur (avec model_id séquentiel auto)
   async create(data) {
     const { nom, prenom, email, mot_de_passe, type_utilisateur } = data;
     const hash = await bcrypt.hash(mot_de_passe, 10);
     const { rows } = await pool.query(
-      `INSERT INTO utilisateurs (nom, prenom, email, mot_de_passe, type_utilisateur)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, nom, prenom, email, type_utilisateur, actif, created_at`,
+      `WITH next_num AS (
+         SELECT COALESCE(MAX(CAST(SUBSTRING(model_id, 2) AS INT)), 0) + 1 AS n
+         FROM utilisateurs WHERE model_id IS NOT NULL
+       )
+       INSERT INTO utilisateurs (nom, prenom, email, mot_de_passe, type_utilisateur, model_id)
+       VALUES ($1, $2, $3, $4, $5, 'u' || LPAD((SELECT n FROM next_num)::text, 3, '0'))
+       RETURNING id, nom, prenom, email, type_utilisateur, model_id, actif, created_at`,
       [nom, prenom, email, hash, type_utilisateur]
     );
     return rows[0];
