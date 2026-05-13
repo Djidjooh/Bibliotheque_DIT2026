@@ -61,6 +61,8 @@ const LoanController = {
         return res.status(409).json({ error: 'Aucun exemplaire disponible' });
       if (err.message === 'EMPRUNT_DEJA_EN_COURS')
         return res.status(409).json({ error: 'Livre déjà emprunté par cet utilisateur' });
+      if (err.message === 'LIMITE_EMPRUNTS_ATTEINTE')
+        return res.status(409).json({ error: 'Limite de 3 emprunts simultanés atteinte. Retournez un livre avant d\'en emprunter un nouveau.' });
       res.status(500).json({ error: err.message });
     }
   },
@@ -82,6 +84,17 @@ const LoanController = {
     try {
       const retards = await LoanModel.detecterRetards();
       res.json({ message: `${retards.length} emprunt(s) mis en retard`, retards });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+
+  // GET /api/emprunts/penalites
+  async getPenalites(req, res) {
+    try {
+      const retards = await LoanModel.getPenalites();
+      const total_penalites_fcfa = retards.reduce((s, r) => s + parseInt(r.penalite_fcfa || 0), 0);
+      res.json({ retards, total: retards.length, total_penalites_fcfa });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

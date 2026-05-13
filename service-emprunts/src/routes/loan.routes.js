@@ -4,6 +4,7 @@ const LoanController = require('../controllers/loan.controller');
 
 // Routes spéciales avant /:id
 router.get('/stats',                  LoanController.getStats);
+router.get('/penalites',              LoanController.getPenalites);
 router.get('/export/csv',             LoanController.exportCSV);
 router.get('/utilisateur/:userId',    LoanController.getByUser);
 router.post('/detecter-retards',      LoanController.detecterRetards);

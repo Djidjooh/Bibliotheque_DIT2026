@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
 from api.schemas import RecommandationResponse, RecommandationItem, TrainRequest, TrainResponse
-from api.db import resolve_user_model_id, get_books_by_model_ids
+from api.db import (
+    resolve_user_model_id, get_books_by_model_ids,
+    count_user_loans, get_fallback_recommendations, MIN_EMPRUNTS_RECO,
+)
 from ml.recommender import Recommender
 from ml.loader import ModelLoader
 
@@ -17,46 +20,85 @@ def get_recommendations(
     if ModelLoader.model is None:
         raise HTTPException(status_code=503, detail="Modèle non chargé.")
 
-    # 1. Résoudre l'UUID → model_id
+    # 1. Résoudre l'UUID → model_id (ou lever 404 si utilisateur inconnu)
     try:
         model_uid = resolve_user_model_id(user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # 2. Obtenir les recommandations SVD (retourne des model_id livres)
+    # 2. Tenter les recommandations SVD
     try:
         preds = Recommender.recommend(
             model=ModelLoader.model,
             user_id=model_uid,
             top_k=top_k,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        # 3. Enrichir avec les détails des livres
+        book_model_ids = [p["book_id"] for p in preds]
+        book_details   = get_books_by_model_ids(book_model_ids)
 
-    # 3. Enrichir avec les détails des livres depuis la BD
-    book_model_ids = [p["book_id"] for p in preds]
-    book_details   = get_books_by_model_ids(book_model_ids)
+        items = []
+        for p in preds:
+            info = book_details.get(p["book_id"], {})
+            items.append(RecommandationItem(
+                book_id=info.get("model_id", p["book_id"]),
+                model_id=p["book_id"],
+                score=p["score"],
+                titre=info.get("titre"),
+                auteur=info.get("auteur"),
+                categorie=info.get("categorie"),
+                annee_publication=info.get("annee_publication"),
+                exemplaires_disponibles=info.get("exemplaires_disponibles"),
+            ))
 
-    items = []
-    for p in preds:
-        info = book_details.get(p["book_id"], {})
-        items.append(RecommandationItem(
-            book_id=info.get("model_id", p["book_id"]),
-            model_id=p["book_id"],
-            score=p["score"],
-            titre=info.get("titre"),
-            auteur=info.get("auteur"),
-            categorie=info.get("categorie"),
-            annee_publication=info.get("annee_publication"),
-            exemplaires_disponibles=info.get("exemplaires_disponibles"),
-        ))
+        return RecommandationResponse(
+            user_id=user_id,
+            model_id=model_uid,
+            recommandations=items,
+            total=len(items),
+        )
 
-    return RecommandationResponse(
-        user_id=user_id,
-        model_id=model_uid,
-        recommandations=items,
-        total=len(items),
-    )
+    except ValueError:
+        # L'utilisateur n'est pas dans le modèle SVD → fallback DB-based
+        nb_emprunts = count_user_loans(user_id)
+
+        if nb_emprunts < MIN_EMPRUNTS_RECO:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Historique insuffisant ({nb_emprunts} emprunt(s)). "
+                    f"Empruntez au moins {MIN_EMPRUNTS_RECO} livres pour obtenir des recommandations personnalisées."
+                )
+            )
+
+        # Recommandations basées sur les catégories préférées de l'utilisateur
+        fallback = get_fallback_recommendations(user_id, top_k=top_k)
+        if not fallback:
+            raise HTTPException(
+                status_code=404,
+                detail="Aucune recommandation disponible pour le moment."
+            )
+
+        items = [
+            RecommandationItem(
+                book_id=f["book_id"],
+                model_id=f["model_id"],
+                score=f["score"],
+                titre=f["titre"],
+                auteur=f["auteur"],
+                categorie=f["categorie"],
+                annee_publication=f["annee_publication"],
+                exemplaires_disponibles=f["exemplaires_disponibles"],
+            )
+            for f in fallback
+        ]
+
+        return RecommandationResponse(
+            user_id=user_id,
+            model_id=model_uid,
+            recommandations=items,
+            total=len(items),
+        )
 
 
 # POST /api/train

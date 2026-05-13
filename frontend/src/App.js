@@ -134,7 +134,7 @@ function AuthPage({ onLogin }) {
           <h2 style={{ color:'#fff', margin:0, fontSize:18, fontWeight:600, letterSpacing:'.4px' }}>
             Bibliothèque Numérique
           </h2>
-          <p style={{ color:'#a8d8e8', margin:'5px 0 0', fontSize:12 }}>Master 2 IA — DIT Sénégal</p>
+          <p style={{ color:'#a8d8e8', margin:'5px 0 0', fontSize:12 }}></p>
         </div>
 
         {/* Tabs */}
@@ -195,8 +195,8 @@ function AuthPage({ onLogin }) {
 
           {mode === 'login' && (
             <p style={{ marginTop:12, fontSize:11, color:'#999', textAlign:'center', lineHeight:1.6 }}>
-              Compte gestionnaire démo :<br />
-              <strong style={{ color:C.primary }}>admin@dit.sn</strong> / <strong style={{ color:C.primary }}>admin2026</strong>
+              copyright@DIT_M2-IA2026<br />
+              <strong style={{ color:C.primary }}></strong> / <strong style={{ color:C.primary }}></strong>
             </p>
           )}
         </form>
@@ -300,10 +300,17 @@ function UserApp({ user, onLogout }) {
 
   // ── Recommandations ─────────────────────────────────────────────────────
   const getRecos = useCallback(() => {
-    setRecoLoad(true); setRecoErr('');
+    setRecoLoad(true); setRecoErr(''); setRecos([]);
     axios.get(`${RECO_URL}/api/recommendations/${user.id}?top_k=10`)
-      .then(r => setRecos(r.data.recommandations||[]))
-      .catch(e => { setRecoErr(e.response?.data?.detail || 'Service indisponible.'); setRecos([]); })
+      .then(r => {
+        const items = r.data.recommandations || [];
+        setRecos(items);
+        if (items.length === 0) setRecoErr('Aucune recommandation disponible pour le moment.');
+      })
+      .catch(e => {
+        const msg = e.response?.data?.detail || 'Service de recommandation indisponible.';
+        setRecoErr(msg);
+      })
       .finally(()=> setRecoLoad(false));
   }, [user.id]);
 
@@ -446,8 +453,9 @@ function UserApp({ user, onLogout }) {
                   <th style={S.th}>Livre</th>
                   <th style={S.th}>Catégorie</th>
                   <th style={{ ...S.th, textAlign:'center' }}>Emprunté le</th>
-                  <th style={{ ...S.th, textAlign:'center' }}>Retour prévu</th>
+                  <th style={{ ...S.th, textAlign:'center' }}>Retour prévu (30j)</th>
                   <th style={{ ...S.th, textAlign:'center' }}>Statut</th>
+                  <th style={{ ...S.th, textAlign:'center' }}>Pénalité</th>
                   <th style={{ ...S.th, textAlign:'center' }}>Action</th>
                 </tr></thead>
                 <tbody>
@@ -459,10 +467,22 @@ function UserApp({ user, onLogout }) {
                       <td style={{ ...S.td, textAlign:'center' }}>{fmtDate(e.date_retour_prevue)}</td>
                       <td style={{ ...S.td, textAlign:'center' }}>{statutBadge(e.statut)}</td>
                       <td style={{ ...S.td, textAlign:'center' }}>
+                        {e.statut === 'en_retard' ? (
+                          <span style={{ color:C.danger, fontWeight:'bold', fontSize:12 }}>
+                            {e.jours_retard}j · {parseInt(e.penalite_fcfa||0).toLocaleString()} FCFA
+                          </span>
+                        ) : (
+                          <span style={{ color:'#bbb', fontSize:12 }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ ...S.td, textAlign:'center' }}>
                         {e.statut === 'en_cours' || e.statut === 'en_retard' ? (
-                          <button style={S.btnReturn} onClick={() => retournerLivre(e)}>
-                            ↩ Retourner
-                          </button>
+                          <span title="Le retour est traité par le gestionnaire de la bibliothèque"
+                            style={{ display:'inline-block', padding:'5px 10px', background:'#f5f5f5',
+                              color:'#aaa', border:'1px solid #ddd', borderRadius:5, fontSize:12,
+                              cursor:'not-allowed', userSelect:'none' }}>
+                            ↩ Retour (gestionnaire)
+                          </span>
                         ) : (
                           <span style={{ color:'#bbb', fontSize:12 }}>—</span>
                         )}
@@ -494,9 +514,7 @@ function UserApp({ user, onLogout }) {
 
           {recoErr && (
             <div style={{ ...S.msgErr, marginBottom:16 }}>
-              {user.model_id
-                ? `⚠ ${recoErr} — Votre compte (${user.model_id}) n'a pas encore assez d'historique.`
-                : '⚠ Votre compte ne dispose pas encore d\'un identifiant modèle.'}
+              ⚠ {recoErr}
             </div>
           )}
 
@@ -751,6 +769,7 @@ function AdminApp({ user, onLogout }) {
                 { val:dashboard.global.emprunts_en_cours,       label:'Emprunts en cours', color:'#1565c0'  },
                 { val:dashboard.global.emprunts_en_retard,      label:'En retard',         color:C.danger   },
                 { val:dashboard.global.total_emprunts,          label:'Total emprunts',    color:C.gray     },
+                { val:`${parseInt(dashboard.global.total_penalites_fcfa||0).toLocaleString()} F`, label:'Pénalités (FCFA)', color:C.danger },
               ].map(({val, label, color}) => (
                 <div key={label} style={S.statCard}>
                   <div style={{ fontSize:28, fontWeight:'bold', color }}>{val||0}</div>
@@ -1134,6 +1153,7 @@ function AdminApp({ user, onLogout }) {
                   { val:empHistory.stats.en_cours,  label:'En cours',  color:'#1565c0', bg:'#e3f2fd' },
                   { val:empHistory.stats.retournes, label:'Retournés', color:C.success, bg:'#e0f7f4' },
                   { val:empHistory.stats.en_retard, label:'En retard', color:C.danger,  bg:'#ffebee' },
+                  { val:`${parseInt(empHistory.stats.total_penalites_fcfa||0).toLocaleString()} F`, label:'Pénalités', color:C.danger, bg:'#fff3e0' },
                 ].map(({ val, label, color, bg }) => (
                   <div key={label} style={{ ...S.statCard, background:bg, border:'none', flex:'none', minWidth:100, padding:'12px 18px' }}>
                     <div style={{ fontSize:22, fontWeight:'bold', color }}>{val}</div>
@@ -1149,10 +1169,11 @@ function AdminApp({ user, onLogout }) {
                       <th style={S.th}>Livre</th>
                       <th style={S.th}>Catégorie</th>
                       <th style={{ ...S.th, textAlign:'center' }}>Emprunté le</th>
-                      <th style={{ ...S.th, textAlign:'center' }}>Retour prévu</th>
+                      <th style={{ ...S.th, textAlign:'center' }}>Retour prévu (30j)</th>
                       <th style={{ ...S.th, textAlign:'center' }}>Retour effectif</th>
                       <th style={{ ...S.th, textAlign:'center' }}>Durée</th>
                       <th style={{ ...S.th, textAlign:'center' }}>Statut</th>
+                      <th style={{ ...S.th, textAlign:'center' }}>Retard / Pénalité</th>
                       <th style={{ ...S.th, textAlign:'center' }}>Note</th>
                       <th style={{ ...S.th, textAlign:'center' }}>Action</th>
                     </tr></thead>
@@ -1166,6 +1187,15 @@ function AdminApp({ user, onLogout }) {
                           <td style={{ ...S.td, textAlign:'center' }}>{fmtDate(e.date_retour_effective)}</td>
                           <td style={{ ...S.td, textAlign:'center' }}>{e.duree_jours}j</td>
                           <td style={{ ...S.td, textAlign:'center' }}>{statutBadge(e.statut)}</td>
+                          <td style={{ ...S.td, textAlign:'center' }}>
+                            {parseInt(e.jours_retard||0) > 0 ? (
+                              <span style={{ color:C.danger, fontWeight:'bold', fontSize:12 }}>
+                                {e.jours_retard}j · {parseInt(e.penalite_fcfa||0).toLocaleString()} FCFA
+                              </span>
+                            ) : (
+                              <span style={{ color:'#4caf50', fontSize:12 }}>Aucune</span>
+                            )}
+                          </td>
                           <td style={{ ...S.td, textAlign:'center' }}>
                             {e.note_donnee>0
                               ? <span style={{ color:'#f57c00' }}>{'★'.repeat(Math.round(e.note_donnee))} {e.note_donnee}/5</span>

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.routes import router
 from ml.loader import ModelLoader
@@ -16,6 +17,13 @@ app = FastAPI(
     description="Système de recommandation de livres basé sur SVD",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(router, prefix="/api")

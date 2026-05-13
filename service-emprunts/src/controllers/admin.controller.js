@@ -1,6 +1,7 @@
 const pool = require('../models/db');
 
-const DUREE = parseInt(process.env.DUREE_EMPRUNT_JOURS) || 14;
+const DUREE         = parseInt(process.env.DUREE_EMPRUNT_JOURS) || 30;
+const PENALITE_JOUR = 500; // FCFA par jour de retard
 
 const AdminController = {
 
@@ -20,7 +21,12 @@ const AdminController = {
             (SELECT COUNT(*) FILTER (WHERE statut = 'en_cours')  FROM emprunts)      AS emprunts_en_cours,
             (SELECT COUNT(*) FILTER (WHERE statut = 'en_retard') FROM emprunts)      AS emprunts_en_retard,
             (SELECT COUNT(*) FILTER (WHERE statut = 'retourne')  FROM emprunts)      AS emprunts_retournes,
-            (SELECT COUNT(*)                              FROM emprunts)             AS total_emprunts
+            (SELECT COUNT(*)                              FROM emprunts)             AS total_emprunts,
+            (SELECT COALESCE(SUM(
+              CASE WHEN statut = 'en_retard'
+              THEN (CURRENT_DATE - date_retour_prevue) * ${PENALITE_JOUR}
+              ELSE 0 END
+            ), 0) FROM emprunts)                                                     AS total_penalites_fcfa
         `),
 
         // Top 5 livres les plus empruntés
@@ -40,7 +46,12 @@ const AdminController = {
           SELECT u.nom, u.prenom, u.email, u.type_utilisateur,
                  COUNT(e.id) AS nb_emprunts,
                  COUNT(e.id) FILTER (WHERE e.statut = 'en_cours')  AS en_cours,
-                 COUNT(e.id) FILTER (WHERE e.statut = 'en_retard') AS en_retard
+                 COUNT(e.id) FILTER (WHERE e.statut = 'en_retard') AS en_retard,
+                 COALESCE(SUM(
+                   CASE WHEN e.statut = 'en_retard'
+                   THEN (CURRENT_DATE - e.date_retour_prevue) * ${PENALITE_JOUR}
+                   ELSE 0 END
+                 ), 0) AS penalites_fcfa
           FROM emprunts e
           JOIN utilisateurs u ON u.id = e.utilisateur_id
           GROUP BY u.id, u.nom, u.prenom, u.email, u.type_utilisateur
@@ -93,7 +104,8 @@ const AdminController = {
       const { rows } = await pool.query(`
         SELECT
           e.id, e.date_emprunt, e.date_retour_prevue,
-          CURRENT_DATE - e.date_retour_prevue AS jours_retard,
+          CURRENT_DATE - e.date_retour_prevue                            AS jours_retard,
+          (CURRENT_DATE - e.date_retour_prevue) * ${PENALITE_JOUR}      AS penalite_fcfa,
           u.id AS utilisateur_id, u.nom, u.prenom, u.email, u.type_utilisateur,
           l.id AS livre_id, l.titre, l.auteur, l.isbn, l.categorie
         FROM emprunts e
@@ -102,7 +114,8 @@ const AdminController = {
         WHERE e.statut = 'en_retard'
         ORDER BY jours_retard DESC
       `);
-      res.json({ retards: rows, total: rows.length });
+      const total_penalites = rows.reduce((s, r) => s + parseInt(r.penalite_fcfa || 0), 0);
+      res.json({ retards: rows, total: rows.length, total_penalites_fcfa: total_penalites });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -185,6 +198,20 @@ const AdminController = {
             THEN e.date_retour_effective - e.date_emprunt
             ELSE CURRENT_DATE - e.date_emprunt
           END AS duree_jours,
+          CASE
+            WHEN e.statut = 'en_retard'
+            THEN GREATEST(0, CURRENT_DATE - e.date_retour_prevue)
+            WHEN e.statut = 'retourne' AND e.date_retour_effective > e.date_retour_prevue
+            THEN GREATEST(0, e.date_retour_effective - e.date_retour_prevue)
+            ELSE 0
+          END AS jours_retard,
+          CASE
+            WHEN e.statut = 'en_retard'
+            THEN GREATEST(0, CURRENT_DATE - e.date_retour_prevue) * ${PENALITE_JOUR}
+            WHEN e.statut = 'retourne' AND e.date_retour_effective > e.date_retour_prevue
+            THEN GREATEST(0, e.date_retour_effective - e.date_retour_prevue) * ${PENALITE_JOUR}
+            ELSE 0
+          END AS penalite_fcfa,
           l.titre, l.auteur, l.isbn, l.categorie,
           COALESCE(n.note, 0) AS note_donnee
         FROM emprunts e
@@ -196,10 +223,11 @@ const AdminController = {
       `, [req.params.userId]);
 
       const stats = {
-        total: rows.length,
+        total:     rows.length,
         retournes: rows.filter(r => r.statut === 'retourne').length,
         en_cours:  rows.filter(r => r.statut === 'en_cours').length,
         en_retard: rows.filter(r => r.statut === 'en_retard').length,
+        total_penalites_fcfa: rows.reduce((s, r) => s + parseInt(r.penalite_fcfa || 0), 0),
       };
 
       res.json({ historique: rows, stats });

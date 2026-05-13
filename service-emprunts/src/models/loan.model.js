@@ -1,6 +1,20 @@
 const pool = require('./db');
 
-const DUREE = parseInt(process.env.DUREE_EMPRUNT_JOURS) || 14;
+const DUREE          = parseInt(process.env.DUREE_EMPRUNT_JOURS) || 30;
+const PENALITE_JOUR  = 500; // FCFA par jour de retard
+
+function calculerPenalite(dateRetourPrevue, dateRetourEffective, statut) {
+  const prevue = new Date(dateRetourPrevue);
+  const ref    = statut === 'retourne' && dateRetourEffective
+    ? new Date(dateRetourEffective)
+    : new Date();
+  ref.setHours(0, 0, 0, 0);
+  prevue.setHours(0, 0, 0, 0);
+
+  const joursRetard = Math.max(0, Math.floor((ref - prevue) / 86400000));
+  const penalite    = joursRetard * PENALITE_JOUR;
+  return { jours_retard: joursRetard, penalite_fcfa: penalite };
+}
 
 const LoanModel = {
 
@@ -35,6 +49,13 @@ const LoanModel = {
       params
     );
 
+    const emprunts = rows.map(row => {
+      const { jours_retard, penalite_fcfa } = calculerPenalite(
+        row.date_retour_prevue, row.date_retour_effective, row.statut
+      );
+      return { ...row, jours_retard, penalite_fcfa };
+    });
+
     const countParams = conditions.length
       ? params.slice(0, params.length - 2)
       : [];
@@ -42,7 +63,7 @@ const LoanModel = {
       `SELECT COUNT(*) FROM emprunts e ${where}`, countParams
     );
 
-    return { emprunts: rows, total: parseInt(count.rows[0].count) };
+    return { emprunts, total: parseInt(count.rows[0].count) };
   },
 
   // Trouver un emprunt par ID
@@ -57,7 +78,12 @@ const LoanModel = {
        WHERE e.id = $1`,
       [id]
     );
-    return rows[0] || null;
+    if (!rows[0]) return null;
+    const row = rows[0];
+    const { jours_retard, penalite_fcfa } = calculerPenalite(
+      row.date_retour_prevue, row.date_retour_effective, row.statut
+    );
+    return { ...row, jours_retard, penalite_fcfa };
   },
 
   // Historique d'un utilisateur
@@ -70,7 +96,12 @@ const LoanModel = {
        ORDER BY e.date_emprunt DESC`,
       [utilisateur_id]
     );
-    return rows;
+    return rows.map(row => {
+      const { jours_retard, penalite_fcfa } = calculerPenalite(
+        row.date_retour_prevue, row.date_retour_effective, row.statut
+      );
+      return { ...row, jours_retard, penalite_fcfa };
+    });
   },
 
   // Créer un emprunt
@@ -87,6 +118,15 @@ const LoanModel = {
       if (!livres[0] || livres[0].exemplaires_disponibles < 1)
         throw new Error('LIVRE_INDISPONIBLE');
 
+      // Vérifier la limite de 3 emprunts simultanés
+      const { rows: countRows } = await client.query(
+        `SELECT COUNT(*) FROM emprunts
+         WHERE utilisateur_id=$1 AND statut IN ('en_cours', 'en_retard')`,
+        [utilisateur_id]
+      );
+      if (parseInt(countRows[0].count) >= 3)
+        throw new Error('LIMITE_EMPRUNTS_ATTEINTE');
+
       // Vérifier que l'utilisateur n'a pas déjà ce livre
       const { rows: existing } = await client.query(
         `SELECT id FROM emprunts
@@ -96,7 +136,7 @@ const LoanModel = {
       if (existing.length > 0)
         throw new Error('EMPRUNT_DEJA_EN_COURS');
 
-      // Calculer la date de retour prévue
+      // Calculer la date de retour prévue (30 jours)
       const dateRetour = new Date();
       dateRetour.setDate(dateRetour.getDate() + DUREE);
 
@@ -115,7 +155,7 @@ const LoanModel = {
       );
 
       await client.query('COMMIT');
-      return rows[0];
+      return { ...rows[0], jours_retard: 0, penalite_fcfa: 0 };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -148,7 +188,11 @@ const LoanModel = {
       );
 
       await client.query('COMMIT');
-      return rows[0];
+      const row = rows[0];
+      const { jours_retard, penalite_fcfa } = calculerPenalite(
+        row.date_retour_prevue, row.date_retour_effective, row.statut
+      );
+      return { ...row, jours_retard, penalite_fcfa };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -166,6 +210,28 @@ const LoanModel = {
          AND date_retour_prevue < CURRENT_DATE
        RETURNING *`
     );
+    return rows.map(row => {
+      const { jours_retard, penalite_fcfa } = calculerPenalite(
+        row.date_retour_prevue, row.date_retour_effective, row.statut
+      );
+      return { ...row, jours_retard, penalite_fcfa };
+    });
+  },
+
+  // Liste des emprunts en retard avec pénalités
+  async getPenalites() {
+    const { rows } = await pool.query(
+      `SELECT e.*,
+              u.nom, u.prenom, u.email,
+              l.titre, l.auteur, l.isbn, l.categorie,
+              (CURRENT_DATE - e.date_retour_prevue) AS jours_retard,
+              (CURRENT_DATE - e.date_retour_prevue) * ${PENALITE_JOUR} AS penalite_fcfa
+       FROM emprunts e
+       JOIN utilisateurs u ON u.id = e.utilisateur_id
+       JOIN livres       l ON l.id = e.livre_id
+       WHERE e.statut = 'en_retard'
+       ORDER BY jours_retard DESC`
+    );
     return rows;
   },
 
@@ -176,7 +242,12 @@ const LoanModel = {
          COUNT(*) FILTER (WHERE statut = 'en_cours')  AS en_cours,
          COUNT(*) FILTER (WHERE statut = 'retourne')  AS retournes,
          COUNT(*) FILTER (WHERE statut = 'en_retard') AS en_retard,
-         COUNT(*)                                      AS total
+         COUNT(*)                                      AS total,
+         COALESCE(SUM(
+           CASE WHEN statut = 'en_retard'
+           THEN (CURRENT_DATE - date_retour_prevue) * ${PENALITE_JOUR}
+           ELSE 0 END
+         ), 0) AS total_penalites_fcfa
        FROM emprunts`
     );
     return rows[0];

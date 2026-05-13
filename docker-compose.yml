@@ -100,7 +100,7 @@ services:
       DB_PASSWORD:             postgres
       SERVICE_LIVRES_URL:      http://service-livres:3001
       SERVICE_UTILISATEURS_URL: http://service-utilisateurs:3002
-      DUREE_EMPRUNT_JOURS:     14
+      DUREE_EMPRUNT_JOURS:     30
       JWT_SECRET:              secret_jwt_bibliotheque_dit
     ports:
       - "3003:3003"
