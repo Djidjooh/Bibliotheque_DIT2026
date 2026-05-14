@@ -553,6 +553,22 @@ penalite_fcfa [calculé: jours × 500 FCFA]
 
 ---
 
+## 👥 Équipe
+
+| Membre | Responsabilité |
+|---|---|
+| **Maurice AHOUANSOU** | Base de données et rapport |
+| **Ibrahima DIALLO** | Service emprunt |
+| **Fatoumata SIDIBE** | Service livres |
+| **Abdin KOUSSUBE** | Service recommandation |
+| **Abdoul G. DIALLO** | Frontend |
+| **Olivier DOULOUROU** | Service utilisateurs |
+| **M. DIAKITE** | DVC pipeline |
+| **Seydou KABORE** | README et Docker Compose |
+| **M. KANE** | Backend / intégration |
+
+---
+
 <div align="center">
 
 **Bibliothèque Numérique DIT** · Master 2 IA · Département Informatique & Télécommunications
