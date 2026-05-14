@@ -593,6 +593,7 @@ function AdminApp({ user, onLogout }) {
   const [allUsers,     setAllUsers]     = useState([]);
   const [allLivres,    setAllLivres]    = useState([]);
   const [empUser,      setEmpUser]      = useState('');
+  const [empUserSearch, setEmpUserSearch] = useState('');
   const [empHistory,   setEmpHistory]   = useState(null);
   const [empMsg,       setEmpMsg]       = useState('');
   const [showEmpForm,  setShowEmpForm]  = useState(false);
@@ -1127,22 +1128,60 @@ function AdminApp({ user, onLogout }) {
           )}
 
           {/* Sélection utilisateur */}
-          <div style={{ ...S.card, display:'flex', gap:12, alignItems:'flex-end', marginBottom:20 }}>
-            <div style={{ flex:1 }}>
-              <label style={S.label}>Voir les emprunts d'un utilisateur</label>
-              <select style={S.input} value={empUser}
-                onChange={e => { setEmpUser(e.target.value); setEmpHistory(null); }}>
-                <option value="">— Sélectionner un utilisateur —</option>
-                {allUsers.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.prenom} {u.nom} — {u.email} {u.model_id?`(${u.model_id})`:''}
-                  </option>
-                ))}
-              </select>
+          <div style={{ ...S.card, marginBottom:20 }}>
+            <div style={{ display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap', marginBottom:10 }}>
+              <div style={{ flex:1, minWidth:220 }}>
+                <label style={S.label}>🔍 Rechercher un utilisateur</label>
+                <input
+                  style={S.input}
+                  placeholder="Nom, prénom ou identifiant (ex: u012)…"
+                  value={empUserSearch}
+                  onChange={e => {
+                    setEmpUserSearch(e.target.value);
+                    setEmpUser('');
+                    setEmpHistory(null);
+                  }}
+                />
+              </div>
+              <div style={{ flex:2, minWidth:260 }}>
+                <label style={S.label}>
+                  Sélectionner un utilisateur
+                  {empUserSearch.trim() && (
+                    <span style={{ marginLeft:6, fontSize:11, color:'#888' }}>
+                      ({allUsers.filter(u => {
+                        const q = empUserSearch.toLowerCase().trim();
+                        return u.nom.toLowerCase().includes(q) ||
+                          u.prenom.toLowerCase().includes(q) ||
+                          `${u.prenom} ${u.nom}`.toLowerCase().includes(q) ||
+                          (u.model_id && u.model_id.toLowerCase().includes(q));
+                      }).length} résultat(s))
+                    </span>
+                  )}
+                </label>
+                <select style={S.input} value={empUser}
+                  onChange={e => { setEmpUser(e.target.value); setEmpHistory(null); }}>
+                  <option value="">— Sélectionner un utilisateur —</option>
+                  {allUsers
+                    .filter(u => {
+                      if (!empUserSearch.trim()) return true;
+                      const q = empUserSearch.toLowerCase().trim();
+                      return u.nom.toLowerCase().includes(q) ||
+                        u.prenom.toLowerCase().includes(q) ||
+                        `${u.prenom} ${u.nom}`.toLowerCase().includes(q) ||
+                        (u.model_id && u.model_id.toLowerCase().includes(q));
+                    })
+                    .map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.prenom} {u.nom} — {u.email} {u.model_id ? `(${u.model_id})` : ''}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+              <button style={S.btn} onClick={() => fetchEmpruntsUser(empUser)} disabled={!empUser}>
+                Charger l'historique
+              </button>
             </div>
-            <button style={S.btn} onClick={() => fetchEmpruntsUser(empUser)} disabled={!empUser}>
-              Charger l'historique
-            </button>
           </div>
 
           {empHistory && (

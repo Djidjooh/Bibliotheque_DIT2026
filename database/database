@@ -2,8 +2,9 @@
 -- Bibliothèque Numérique DIT — Schéma PostgreSQL
 -- =============================================
 
--- Extension UUID
+-- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =============================================
 -- TABLE : utilisateurs
@@ -16,6 +17,7 @@ CREATE TABLE utilisateurs (
     mot_de_passe  VARCHAR(255) NOT NULL,
     type_utilisateur VARCHAR(20) NOT NULL
                   CHECK (type_utilisateur IN ('etudiant', 'professeur', 'personnel')),
+    model_id      VARCHAR(10) UNIQUE,
     actif         BOOLEAN DEFAULT TRUE,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -204,6 +206,32 @@ INSERT INTO utilisateurs (nom, prenom, email, mot_de_passe, type_utilisateur) VA
   ('Tovignan', 'Helena', 'helena98@dit.sn', 'hashed_pwd_98', 'etudiant'),
   ('Bodjrenou', 'Germain', 'germain99@dit.sn', 'hashed_pwd_99', 'professeur'),
   ('Dossa', 'Rachel', 'rachel100@dit.sn', 'hashed_pwd_100', 'personnel');
+
+-- Compte administrateur
+INSERT INTO utilisateurs (nom, prenom, email, mot_de_passe, type_utilisateur) VALUES
+  ('Admin', 'Système', 'admin@dit.sn', 'admin_placeholder', 'personnel');
+
+-- Assignation automatique des model_id (u001, u002, ...)
+DO $$
+DECLARE
+  r RECORD;
+  n INT := 1;
+BEGIN
+  FOR r IN SELECT id FROM utilisateurs ORDER BY email LOOP
+    UPDATE utilisateurs SET model_id = 'u' || LPAD(n::text, 3, '0') WHERE id = r.id;
+    n := n + 1;
+  END LOOP;
+END $$;
+
+-- Hachage bcrypt de tous les mots de passe (mot de passe par défaut : dit2026)
+UPDATE utilisateurs
+  SET mot_de_passe = crypt('dit2026', gen_salt('bf', 10))
+  WHERE email != 'admin@dit.sn';
+
+-- Mot de passe administrateur : admin2026
+UPDATE utilisateurs
+  SET mot_de_passe = crypt('admin2026', gen_salt('bf', 10))
+  WHERE email = 'admin@dit.sn';
 
 INSERT INTO livres (titre, auteur, isbn, categorie, annee_publication, nombre_exemplaires, exemplaires_disponibles) VALUES
 ('Intelligence Artificielle : une approche moderne', 'Russell & Norvig', '978-0134610993', 'IA', 2020, 3, 3),

@@ -1,0 +1,23 @@
+# Normalise les fins de ligne pour la compatibilité Windows/Linux/macOS
+* text=auto eol=lf
+
+# Scripts shell : toujours LF (évite les erreurs "bad interpreter" sur Linux/macOS)
+*.sh text eol=lf
+
+# Fichiers SQL : toujours LF
+*.sql text eol=lf
+
+# Fichiers JS/JSON : LF
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Fichiers binaires : pas de conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pkl binary
+*.pdf binary

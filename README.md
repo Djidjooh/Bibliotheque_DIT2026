@@ -196,10 +196,21 @@ docker-compose ps
 ### 4️⃣ Réinitialiser la base de données
 
 ```bash
-# Supprime les volumes et recrée tout
+# Supprime les volumes et recrée tout (Linux / macOS / Windows)
 docker-compose down -v
 docker-compose up --build -d
 ```
+
+### 5️⃣ Corriger les mots de passe (base existante)
+
+Si les utilisateurs ne peuvent pas se connecter après une mise à jour, exécutez :
+
+```bash
+# Compatible Windows / Linux / macOS (nécessite Node.js)
+node scripts/fix-passwords.js
+```
+
+Ce script détecte et corrige automatiquement les mots de passe non hachés.
 
 ---
 
@@ -326,9 +337,15 @@ GET  /api/model/info
 | Rôle | Email | Mot de passe |
 |---|---|---|
 | 🔑 Gestionnaire (Admin) | `admin@dit.sn` | `admin2026` |
-| 🎓 Étudiant | `mamadou@dit.sn` | *(voir DB)* |
-| 👨‍🏫 Professeur | `ibrahima@dit.sn` | *(voir DB)* |
+| 🎓 Étudiant | `mamadou1@dit.sn` | `dit2026` |
+| 🎓 Étudiant | `fatou2@dit.sn` | `dit2026` |
+| 👨‍🏫 Professeur | `ibrahima3@dit.sn` | `dit2026` |
+| 👩‍💼 Personnel | `aminata4@dit.sn` | `dit2026` |
 
+> **Mot de passe par défaut de tous les comptes seed :** `dit2026`
+>
+> Les utilisateurs peuvent aussi s'inscrire librement via l'interface avec leur propre mot de passe.
+>
 > **Note :** Le gestionnaire a accès au tableau de bord complet, à la gestion des livres, des utilisateurs et peut valider les retours de livres.
 
 ---

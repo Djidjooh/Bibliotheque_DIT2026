@@ -6,7 +6,7 @@ const UserModel = {
   // Lister tous les utilisateurs
   async findAll({ page = 1, limit = 10, type }) {
     const offset = (page - 1) * limit;
-    let query  = `SELECT id, nom, prenom, email, type_utilisateur, actif, created_at
+    let query  = `SELECT id, nom, prenom, email, type_utilisateur, model_id, actif, created_at
                   FROM utilisateurs`;
     const params = [];
 
